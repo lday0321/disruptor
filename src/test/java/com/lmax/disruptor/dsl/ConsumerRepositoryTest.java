@@ -49,16 +49,23 @@ public class ConsumerRepositoryTest
 
         final Sequence sequence1 = new Sequence();
         final Sequence sequence2 = new Sequence();
-        mockery.checking(new Expectations()
-        {
+        mockery.checking(
+            new Expectations()
             {
-                allowing(eventProcessor1).getSequence();
-                will(returnValue(sequence1));
+                {
+                    allowing(eventProcessor1).getSequence();
+                    will(returnValue(sequence1));
 
-                allowing(eventProcessor2).getSequence();
-                will(returnValue(sequence2));
-            }
-        });
+                    allowing(eventProcessor1).isRunning();
+                    will(returnValue(true));
+
+                    allowing(eventProcessor2).getSequence();
+                    will(returnValue(sequence2));
+
+                    allowing(eventProcessor2).isRunning();
+                    will(returnValue(true));
+                }
+            });
         handler1 = new SleepingEventHandler();
         handler2 = new SleepingEventHandler();
 
@@ -89,7 +96,7 @@ public class ConsumerRepositoryTest
         consumerRepository.unMarkEventProcessorsAsEndOfChain(eventProcessor2.getSequence());
 
 
-        final Sequence[] lastEventProcessorsInChain = consumerRepository.getLastSequenceInChain();
+        final Sequence[] lastEventProcessorsInChain = consumerRepository.getLastSequenceInChain(true);
         assertThat(lastEventProcessorsInChain.length, equalTo(1));
         assertThat(lastEventProcessorsInChain[0], sameInstance(eventProcessor1.getSequence()));
     }
@@ -118,14 +125,14 @@ public class ConsumerRepositoryTest
         boolean seen2 = false;
         for (ConsumerInfo testEntryEventProcessorInfo : consumerRepository)
         {
-            final EventProcessorInfo eventProcessorInfo = (EventProcessorInfo) testEntryEventProcessorInfo;
+            final EventProcessorInfo<?> eventProcessorInfo = (EventProcessorInfo<?>) testEntryEventProcessorInfo;
             if (!seen1 && eventProcessorInfo.getEventProcessor() == eventProcessor1 &&
                 eventProcessorInfo.getHandler() == handler1)
             {
                 seen1 = true;
             }
             else if (!seen2 && eventProcessorInfo.getEventProcessor() == eventProcessor2 &&
-                     eventProcessorInfo.getHandler() == handler2)
+                eventProcessorInfo.getHandler() == handler2)
             {
                 seen2 = true;
             }

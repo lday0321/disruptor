@@ -15,10 +15,10 @@
  */
 package com.lmax.disruptor;
 
+import com.lmax.disruptor.util.Util;
+
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import com.lmax.disruptor.util.Util;
 
 /**
  * WorkerPool contains a pool of {@link WorkProcessor}s that will consume sequences so jobs can be farmed out across a pool of workers.
@@ -36,19 +36,20 @@ public final class WorkerPool<T>
 
     /**
      * Create a worker pool to enable an array of {@link WorkHandler}s to consume published sequences.
-     *
+     * <p>
      * This option requires a pre-configured {@link RingBuffer} which must have {@link RingBuffer#addGatingSequences(Sequence...)}
      * called before the work pool is started.
      *
-     * @param ringBuffer of events to be consumed.
-     * @param sequenceBarrier on which the workers will depend.
+     * @param ringBuffer       of events to be consumed.
+     * @param sequenceBarrier  on which the workers will depend.
      * @param exceptionHandler to callback when an error occurs which is not handled by the {@link WorkHandler}s.
-     * @param workHandlers to distribute the work load across.
+     * @param workHandlers     to distribute the work load across.
      */
-    public WorkerPool(final RingBuffer<T> ringBuffer,
-                      final SequenceBarrier sequenceBarrier,
-                      final ExceptionHandler exceptionHandler,
-                      final WorkHandler<T>... workHandlers)
+    public WorkerPool(
+        final RingBuffer<T> ringBuffer,
+        final SequenceBarrier sequenceBarrier,
+        final ExceptionHandler<? super T> exceptionHandler,
+        final WorkHandler<? super T>... workHandlers)
     {
         this.ringBuffer = ringBuffer;
         final int numWorkers = workHandlers.length;
@@ -56,26 +57,28 @@ public final class WorkerPool<T>
 
         for (int i = 0; i < numWorkers; i++)
         {
-            workProcessors[i] = new WorkProcessor<T>(ringBuffer,
-                                                     sequenceBarrier,
-                                                     workHandlers[i],
-                                                     exceptionHandler,
-                                                     workSequence);
+            workProcessors[i] = new WorkProcessor<T>(
+                ringBuffer,
+                sequenceBarrier,
+                workHandlers[i],
+                exceptionHandler,
+                workSequence);
         }
     }
 
     /**
      * Construct a work pool with an internal {@link RingBuffer} for convenience.
-     *
+     * <p>
      * This option does not require {@link RingBuffer#addGatingSequences(Sequence...)} to be called before the work pool is started.
      *
-     * @param eventFactory for filling the {@link RingBuffer}
+     * @param eventFactory     for filling the {@link RingBuffer}
      * @param exceptionHandler to callback when an error occurs which is not handled by the {@link WorkHandler}s.
-     * @param workHandlers to distribute the work load across.
+     * @param workHandlers     to distribute the work load across.
      */
-    public WorkerPool(final EventFactory<T> eventFactory,
-                      final ExceptionHandler exceptionHandler,
-                      final WorkHandler<T>... workHandlers)
+    public WorkerPool(
+        final EventFactory<T> eventFactory,
+        final ExceptionHandler<? super T> exceptionHandler,
+        final WorkHandler<? super T>... workHandlers)
     {
         ringBuffer = RingBuffer.createMultiProducer(eventFactory, 1024, new BlockingWaitStrategy());
         final SequenceBarrier barrier = ringBuffer.newBarrier();
@@ -84,13 +87,15 @@ public final class WorkerPool<T>
 
         for (int i = 0; i < numWorkers; i++)
         {
-            workProcessors[i] = new WorkProcessor<T>(ringBuffer,
-                                                     barrier,
-                                                     workHandlers[i],
-                                                     exceptionHandler,
-                                                     workSequence);
+            workProcessors[i] = new WorkProcessor<T>(
+                ringBuffer,
+                barrier,
+                workHandlers[i],
+                exceptionHandler,
+                workSequence);
         }
 
+        ringBuffer.addGatingSequences(workSequence);
         ringBuffer.addGatingSequences(getWorkerSequences());
     }
 
@@ -101,11 +106,12 @@ public final class WorkerPool<T>
      */
     public Sequence[] getWorkerSequences()
     {
-        final Sequence[] sequences = new Sequence[workProcessors.length];
+        final Sequence[] sequences = new Sequence[workProcessors.length + 1];
         for (int i = 0, size = workProcessors.length; i < size; i++)
         {
             sequences[i] = workProcessors[i].getSequence();
         }
+        sequences[sequences.length - 1] = workSequence;
 
         return sequences;
     }
@@ -166,5 +172,10 @@ public final class WorkerPool<T>
         }
 
         started.set(false);
+    }
+
+    public boolean isRunning()
+    {
+        return started.get();
     }
 }

@@ -5,44 +5,40 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import com.lmax.disruptor.AlertException;
-import com.lmax.disruptor.Sequence;
-import com.lmax.disruptor.SequenceBarrier;
-import com.lmax.disruptor.WaitStrategy;
-
 public class TimeoutBlockingWaitStrategy implements WaitStrategy
 {
     private final Lock lock = new ReentrantLock();
     private final Condition processorNotifyCondition = lock.newCondition();
     private final long timeoutInNanos;
-    
+
     public TimeoutBlockingWaitStrategy(final long timeout, final TimeUnit units)
     {
         timeoutInNanos = units.toNanos(timeout);
     }
 
     @Override
-    public long waitFor(final long sequence, 
-                        final Sequence cursorSequence, 
-                        final Sequence dependentSequence, 
-                        final SequenceBarrier barrier)
-        throws AlertException, InterruptedException
+    public long waitFor(
+        final long sequence,
+        final Sequence cursorSequence,
+        final Sequence dependentSequence,
+        final SequenceBarrier barrier)
+        throws AlertException, InterruptedException, TimeoutException
     {
         long nanos = timeoutInNanos;
-        
+
         long availableSequence;
-        if ((availableSequence = cursorSequence.get()) < sequence)
+        if (cursorSequence.get() < sequence)
         {
             lock.lock();
             try
             {
-                while ((availableSequence = cursorSequence.get()) < sequence)
+                while (cursorSequence.get() < sequence)
                 {
                     barrier.checkAlert();
                     nanos = processorNotifyCondition.awaitNanos(nanos);
                     if (nanos <= 0)
                     {
-                        return availableSequence;
+                        throw TimeoutException.INSTANCE;
                     }
                 }
             }
@@ -74,4 +70,11 @@ public class TimeoutBlockingWaitStrategy implements WaitStrategy
         }
     }
 
+    @Override
+    public String toString()
+    {
+        return "TimeoutBlockingWaitStrategy{" +
+            "processorNotifyCondition=" + processorNotifyCondition +
+            '}';
+    }
 }

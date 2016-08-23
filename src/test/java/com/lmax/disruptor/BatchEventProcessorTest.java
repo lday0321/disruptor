@@ -41,11 +41,17 @@ public final class BatchEventProcessorTest
 
     private final RingBuffer<StubEvent> ringBuffer = createMultiProducer(StubEvent.EVENT_FACTORY, 16);
     private final SequenceBarrier sequenceBarrier = ringBuffer.newBarrier();
-    @SuppressWarnings("unchecked") private final EventHandler<StubEvent> eventHandler = context.mock(EventHandler.class);
-    private final BatchEventProcessor<StubEvent> batchEventProcessor = new BatchEventProcessor<StubEvent>(ringBuffer, sequenceBarrier, eventHandler);
+    @SuppressWarnings("unchecked")
+    private final EventHandler<StubEvent> eventHandler = context.mock(EventHandler.class);
+    private final BatchEventProcessor<StubEvent> batchEventProcessor = new BatchEventProcessor<StubEvent>(
+        ringBuffer, sequenceBarrier, eventHandler);
+
     {
         ringBuffer.addGatingSequences(batchEventProcessor.getSequence());
     }
+
+    @SuppressWarnings("unchecked")
+    private final ExceptionHandler<StubEvent> exceptionHandler = context.mock(ExceptionHandler.class);
 
     @Test(expected = NullPointerException.class)
     public void shouldThrowExceptionOnSettingNullExceptionHandler()
@@ -57,15 +63,16 @@ public final class BatchEventProcessorTest
     public void shouldCallMethodsInLifecycleOrder()
         throws Exception
     {
-        context.checking(new Expectations()
-        {
+        context.checking(
+            new Expectations()
             {
-                oneOf(eventHandler).onEvent(ringBuffer.getPreallocated(0L), 0L, true);
-                inSequence(lifecycleSequence);
+                {
+                    oneOf(eventHandler).onEvent(ringBuffer.get(0L), 0L, true);
+                    inSequence(lifecycleSequence);
 
-                will(countDown(latch));
-            }
-        });
+                    will(countDown(latch));
+                }
+            });
 
         Thread thread = new Thread(batchEventProcessor);
         thread.start();
@@ -84,19 +91,20 @@ public final class BatchEventProcessorTest
     public void shouldCallMethodsInLifecycleOrderForBatch()
         throws Exception
     {
-        context.checking(new Expectations()
-        {
+        context.checking(
+            new Expectations()
             {
-                oneOf(eventHandler).onEvent(ringBuffer.getPreallocated(0L), 0L, false);
-                inSequence(lifecycleSequence);
-                oneOf(eventHandler).onEvent(ringBuffer.getPreallocated(1L), 1L, false);
-                inSequence(lifecycleSequence);
-                oneOf(eventHandler).onEvent(ringBuffer.getPreallocated(2L), 2L, true);
-                inSequence(lifecycleSequence);
+                {
+                    oneOf(eventHandler).onEvent(ringBuffer.get(0L), 0L, false);
+                    inSequence(lifecycleSequence);
+                    oneOf(eventHandler).onEvent(ringBuffer.get(1L), 1L, false);
+                    inSequence(lifecycleSequence);
+                    oneOf(eventHandler).onEvent(ringBuffer.get(2L), 2L, true);
+                    inSequence(lifecycleSequence);
 
-                will(countDown(latch));
-            }
-        });
+                    will(countDown(latch));
+                }
+            });
 
         ringBuffer.publish(ringBuffer.next());
         ringBuffer.publish(ringBuffer.next());
@@ -116,34 +124,35 @@ public final class BatchEventProcessorTest
         throws Exception
     {
         final Exception ex = new Exception();
-        final ExceptionHandler exceptionHandler = context.mock(ExceptionHandler.class);
         batchEventProcessor.setExceptionHandler(exceptionHandler);
 
-        context.checking(new Expectations()
-        {
+        context.checking(
+            new Expectations()
             {
-                oneOf(eventHandler).onEvent(ringBuffer.getPreallocated(0), 0L, true);
-                inSequence(lifecycleSequence);
-                will(new Action()
                 {
-                    @Override
-                    public Object invoke(final Invocation invocation) throws Throwable
-                    {
-                        throw ex;
-                    }
+                    oneOf(eventHandler).onEvent(ringBuffer.get(0), 0L, true);
+                    inSequence(lifecycleSequence);
+                    will(
+                        new Action()
+                        {
+                            @Override
+                            public Object invoke(final Invocation invocation) throws Throwable
+                            {
+                                throw ex;
+                            }
 
-                    @Override
-                    public void describeTo(final Description description)
-                    {
-                        description.appendText("Throws exception");
-                    }
-                });
+                            @Override
+                            public void describeTo(final Description description)
+                            {
+                                description.appendText("Throws exception");
+                            }
+                        });
 
-                oneOf(exceptionHandler).handleEventException(ex, 0L, ringBuffer.getPreallocated(0));
-                inSequence(lifecycleSequence);
-                will(countDown(latch));
-            }
-        });
+                    oneOf(exceptionHandler).handleEventException(ex, 0L, ringBuffer.get(0));
+                    inSequence(lifecycleSequence);
+                    will(countDown(latch));
+                }
+            });
 
         Thread thread = new Thread(batchEventProcessor);
         thread.start();

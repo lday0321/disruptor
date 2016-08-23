@@ -21,7 +21,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Blocking strategy that uses a lock and condition variable for {@link EventProcessor}s waiting on a barrier.
- *
+ * <p>
  * This strategy can be used when throughput and low-latency are not as important as CPU resource.
  */
 public final class BlockingWaitStrategy implements WaitStrategy
@@ -34,12 +34,12 @@ public final class BlockingWaitStrategy implements WaitStrategy
         throws AlertException, InterruptedException
     {
         long availableSequence;
-        if ((availableSequence = cursorSequence.get()) < sequence)
+        if (cursorSequence.get() < sequence)
         {
             lock.lock();
             try
             {
-                while ((availableSequence = cursorSequence.get()) < sequence)
+                while (cursorSequence.get() < sequence)
                 {
                     barrier.checkAlert();
                     processorNotifyCondition.await();
@@ -71,5 +71,13 @@ public final class BlockingWaitStrategy implements WaitStrategy
         {
             lock.unlock();
         }
+    }
+
+    @Override
+    public String toString()
+    {
+        return "BlockingWaitStrategy{" +
+            "processorNotifyCondition=" + processorNotifyCondition +
+            '}';
     }
 }

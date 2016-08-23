@@ -17,7 +17,7 @@ package com.lmax.disruptor;
 
 /**
  * EventProcessors waitFor events to become available for consumption from the {@link RingBuffer}
- *
+ * <p>
  * An EventProcessor will generally be associated with a Thread for execution.
  */
 public interface EventProcessor extends Runnable
@@ -34,4 +34,6 @@ public interface EventProcessor extends Runnable
      * It will call {@link SequenceBarrier#alert()} to notify the thread to check status.
      */
     void halt();
+
+    boolean isRunning();
 }

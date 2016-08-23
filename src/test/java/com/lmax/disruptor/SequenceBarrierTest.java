@@ -15,10 +15,6 @@
  */
 package com.lmax.disruptor;
 
-import static com.lmax.disruptor.RingBuffer.createMultiProducer;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
 import com.lmax.disruptor.support.StubEvent;
 import com.lmax.disruptor.util.Util;
 import org.jmock.Expectations;
@@ -29,6 +25,11 @@ import org.junit.runner.RunWith;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static com.lmax.disruptor.RingBuffer.createMultiProducer;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 
 @RunWith(JMock.class)
@@ -56,22 +57,24 @@ public final class SequenceBarrierTest
         final Sequence sequence2 = new Sequence(expectedWorkSequence);
         final Sequence sequence3 = new Sequence(expectedNumberMessages);
 
-        context.checking(new Expectations()
-        {
+        context.checking(
+            new Expectations()
             {
-                one(eventProcessor1).getSequence();
-                will(returnValue(sequence1));
+                {
+                    one(eventProcessor1).getSequence();
+                    will(returnValue(sequence1));
 
-                one(eventProcessor2).getSequence();
-                will(returnValue(sequence2));
+                    one(eventProcessor2).getSequence();
+                    will(returnValue(sequence2));
 
-                one(eventProcessor3).getSequence();
-                will(returnValue(sequence3));
-            }
-        });
+                    one(eventProcessor3).getSequence();
+                    will(returnValue(sequence3));
+                }
+            });
 
         SequenceBarrier sequenceBarrier =
-            ringBuffer.newBarrier(eventProcessor1.getSequence(), eventProcessor2.getSequence(), eventProcessor3.getSequence());
+            ringBuffer.newBarrier(
+                eventProcessor1.getSequence(), eventProcessor2.getSequence(), eventProcessor3.getSequence());
 
         long completedWorkSequence = sequenceBarrier.waitFor(expectedWorkSequence);
         assertTrue(completedWorkSequence >= expectedWorkSequence);
@@ -97,7 +100,7 @@ public final class SequenceBarrierTest
             public void run()
             {
                 long sequence = ringBuffer.next();
-                StubEvent event = ringBuffer.getPreallocated(sequence);
+                StubEvent event = ringBuffer.get(sequence);
                 event.setValue((int) sequence);
                 ringBuffer.publish(sequence);
 
@@ -126,42 +129,44 @@ public final class SequenceBarrierTest
         final Sequence sequence2 = new CountDownLatchSequence(8L, latch);
         final Sequence sequence3 = new CountDownLatchSequence(8L, latch);
 
-        context.checking(new Expectations()
-        {
+        context.checking(
+            new Expectations()
             {
-                one(eventProcessor1).getSequence();
-                will(returnValue(sequence1));
+                {
+                    one(eventProcessor1).getSequence();
+                    will(returnValue(sequence1));
 
-                one(eventProcessor2).getSequence();
-                will(returnValue(sequence2));
+                    one(eventProcessor2).getSequence();
+                    will(returnValue(sequence2));
 
-                one(eventProcessor3).getSequence();
-                will(returnValue(sequence3));
-            }
-        });
+                    one(eventProcessor3).getSequence();
+                    will(returnValue(sequence3));
+                }
+            });
 
         final SequenceBarrier sequenceBarrier =
             ringBuffer.newBarrier(Util.getSequencesFor(eventProcessor1, eventProcessor2, eventProcessor3));
 
-        final boolean[] alerted = { false };
-        Thread t = new Thread(new Runnable()
-        {
-            public void run()
+        final boolean[] alerted = {false};
+        Thread t = new Thread(
+            new Runnable()
             {
-                try
+                public void run()
                 {
-                    sequenceBarrier.waitFor(expectedNumberMessages - 1);
+                    try
+                    {
+                        sequenceBarrier.waitFor(expectedNumberMessages - 1);
+                    }
+                    catch (AlertException e)
+                    {
+                        alerted[0] = true;
+                    }
+                    catch (Exception e)
+                    {
+                        // don't care
+                    }
                 }
-                catch (AlertException e)
-                {
-                    alerted[0] = true;
-                }
-                catch (InterruptedException e)
-                {
-                    // don't care
-                }
-            }
-        });
+            });
 
         t.start();
         latch.await(3, TimeUnit.SECONDS);
@@ -225,7 +230,7 @@ public final class SequenceBarrierTest
         for (long i = 0; i < expectedNumberMessages; i++)
         {
             long sequence = ringBuffer.next();
-            StubEvent event = ringBuffer.getPreallocated(sequence);
+            StubEvent event = ringBuffer.get(sequence);
             event.setValue((int) i);
             ringBuffer.publish(sequence);
         }
@@ -234,6 +239,7 @@ public final class SequenceBarrierTest
     private static final class StubEventProcessor implements EventProcessor
     {
         private final Sequence sequence = new Sequence(SingleProducerSequencer.INITIAL_CURSOR_VALUE);
+        private final AtomicBoolean running = new AtomicBoolean(false);
 
         public void setSequence(long sequence)
         {
@@ -249,15 +255,26 @@ public final class SequenceBarrierTest
         @Override
         public void halt()
         {
+            running.set(false);
+        }
+
+        @Override
+        public boolean isRunning()
+        {
+            return running.get();
         }
 
         @Override
         public void run()
         {
+            if (!running.compareAndSet(false, true))
+            {
+                throw new IllegalStateException("Already running");
+            }
         }
     }
 
-    private final static class CountDownLatchSequence extends Sequence
+    private static final class CountDownLatchSequence extends Sequence
     {
         private final CountDownLatch latch;
 

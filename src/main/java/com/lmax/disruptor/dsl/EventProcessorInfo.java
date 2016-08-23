@@ -23,20 +23,21 @@ import com.lmax.disruptor.SequenceBarrier;
 import java.util.concurrent.Executor;
 
 /**
- * Wrapper class to tie together a particular event processing stage<p/>
- *
- * Tracks the event processor instance, the event handler instance, and sequence barrier which the stage is attached to
+ * <p>Wrapper class to tie together a particular event processing stage</p>
+ * <p>
+ * <p>Tracks the event processor instance, the event handler instance, and sequence barrier which the stage is attached to.</p>
  *
  * @param T the type of the configured {@link EventHandler}
  */
 class EventProcessorInfo<T> implements ConsumerInfo
 {
     private final EventProcessor eventprocessor;
-    private final EventHandler<T> handler;
+    private final EventHandler<? super T> handler;
     private final SequenceBarrier barrier;
     private boolean endOfChain = true;
 
-    EventProcessorInfo(final EventProcessor eventprocessor, final EventHandler<T> handler, final SequenceBarrier barrier)
+    EventProcessorInfo(
+        final EventProcessor eventprocessor, final EventHandler<? super T> handler, final SequenceBarrier barrier)
     {
         this.eventprocessor = eventprocessor;
         this.handler = handler;
@@ -51,10 +52,10 @@ class EventProcessorInfo<T> implements ConsumerInfo
     @Override
     public Sequence[] getSequences()
     {
-        return new Sequence[] { eventprocessor.getSequence() };
+        return new Sequence[]{eventprocessor.getSequence()};
     }
 
-    public EventHandler<T> getHandler()
+    public EventHandler<? super T> getHandler()
     {
         return handler;
     }
@@ -90,5 +91,11 @@ class EventProcessorInfo<T> implements ConsumerInfo
     public void markAsUsedInBarrier()
     {
         endOfChain = false;
+    }
+
+    @Override
+    public boolean isRunning()
+    {
+        return eventprocessor.isRunning();
     }
 }

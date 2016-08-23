@@ -45,14 +45,15 @@ public final class FatalExceptionHandlerTest
 
         final Logger logger = context.mock(Logger.class);
 
-        context.checking(new Expectations()
-        {
+        context.checking(
+            new Expectations()
             {
-                oneOf(logger).log(Level.SEVERE, "Exception processing: 0 " + event, causeException);
-            }
-        });
+                {
+                    oneOf(logger).log(Level.SEVERE, "Exception processing: 0 " + event, causeException);
+                }
+            });
 
-        ExceptionHandler exceptionHandler = new FatalExceptionHandler(logger);
+        ExceptionHandler<Object> exceptionHandler = new FatalExceptionHandler(logger);
 
         try
         {
